@@ -1,0 +1,287 @@
+# ============================================================
+# SCHEMA / STRUCTURE
+# ============================================================
+
+- name: Person table exists
+  type: table_exists
+  table: Person
+
+- name: Obsolete table does not exist
+  type: table_not_exists
+  table: ObsoleteTable
+
+- name: Person required columns exist
+  type: columns_exist
+  table: Person
+  columns:
+    - UID_Person
+    - CentralAccount
+    - IsInActive
+
+- name: Person does not contain obsolete columns
+  type: columns_not_exist
+  table: Person
+  columns:
+    - OldColumn
+    - DeprecatedColumn
+
+- name: Person CentralAccount definition is correct
+  type: column_definition
+  table: Person
+  column: CentralAccount
+  data_type: varchar
+  nullable: false
+  max_length: 256
+
+- name: Person primary key is correct
+  type: primary_key
+  table: Person
+  columns:
+    - UID_Person
+
+- name: Person employee foreign key is correct
+  type: foreign_key
+  table: Person
+  columns:
+    - UID_PersonHead
+  referenced_table: Person
+  referenced_columns:
+    - UID_Person
+
+- name: CentralAccount is unique
+  type: unique_constraint
+  table: Person
+  columns:
+    - CentralAccount
+
+- name: Person CentralAccount index exists
+  type: index
+  table: Person
+  index: IX_Person_CentralAccount
+  columns:
+    - CentralAccount
+  unique: false
+
+- name: Person view exists
+  type: view_exists
+  view: QER_VPerson
+
+- name: Person sequence exists
+  type: sequence_exists
+  sequence: PersonSequence
+
+- name: Provisioning procedure exists
+  type: procedure_exists
+  procedure: sp_CreatePerson
+
+- name: Identity lookup function exists
+  type: function_exists
+  function: fn_GetPersonStatus
+
+- name: Person trigger exists
+  type: trigger_exists
+  table: Person
+  trigger: TR_Person_Audit
+
+
+# ============================================================
+# ROW / VALUE VALIDATION
+# ============================================================
+
+- name: Patrick exists
+  type: row_exists
+  table: Person
+  where:
+    CentralAccount: patrick
+
+- name: Test account does not exist
+  type: row_not_exists
+  table: UNSAccountB
+  where:
+    AccountName: obsolete-test-account
+
+- name: Patrick is active
+  type: value
+  table: Person
+  where:
+    CentralAccount: patrick
+  column: IsInActive
+  operator: "="
+  expected: false
+
+- name: Person status is valid
+  type: value_in
+  table: Person
+  column: PersonStatus
+  where:
+    CentralAccount: patrick
+  expected:
+    - Active
+    - Inactive
+    - Retired
+
+- name: Person status is not invalid
+  type: value_not_in
+  table: Person
+  column: PersonStatus
+  where:
+    CentralAccount: patrick
+  expected:
+    - Deleted
+    - Invalid
+
+- name: Person has no deletion date
+  type: value_null
+  table: Person
+  column: DeletionDate
+  where:
+    CentralAccount: patrick
+
+- name: Active person has an employee number
+  type: value_not_null
+  table: Person
+  column: EmployeeNumber
+  where:
+    IsInActive: false
+
+- name: Person age is within valid range
+  type: value_range
+  table: Person
+  column: Age
+  where:
+    IsInActive: false
+  minimum: 18
+  maximum: 100
+  inclusive: true
+
+- name: CentralAccount has correct length
+  type: value_length
+  table: Person
+  column: CentralAccount
+  where:
+    IsInActive: false
+  operator: "<="
+  expected: 256
+
+- name: CentralAccount follows naming convention
+  type: value_pattern
+  table: Person
+  column: CentralAccount
+  where:
+    IsInActive: false
+  pattern: "^[a-zA-Z0-9._-]+$"
+
+
+# ============================================================
+# COUNTS / AGGREGATES
+# ============================================================
+
+- name: There are active persons
+  type: count
+  table: Person
+  where:
+    IsInActive: false
+  operator: ">"
+  expected: 0
+
+- name: Every person has a unique central account
+  type: distinct_count
+  table: Person
+  column: CentralAccount
+  where:
+    CentralAccount:
+      not_null: true
+  operator: "="
+  expected: 50000
+
+- name: No duplicate central accounts
+  type: duplicates
+  table: Person
+  columns:
+    - CentralAccount
+  where:
+    IsInActive: false
+  expected: 0
+
+- name: Total employee count is within expected range
+  type: aggregate
+  table: Person
+  function: COUNT
+  column: UID_Person
+  where:
+    IsInActive: false
+  operator: ">="
+  expected: 1000
+
+
+# ============================================================
+# EXPECTED ROWS / RELATIONSHIPS
+# ============================================================
+
+- name: Required system configuration exists
+  type: expected_rows
+  table: DialogConfigParm
+  columns:
+    - UID_DialogConfigParm
+    - Value
+  where:
+    ParameterName: SystemName
+  expected_rows:
+    - UID_DialogConfigParm: "system-name"
+      Value: "One Identity Manager"
+
+- name: Every account references a person
+  type: relationship
+  source_table: UNSAccountB
+  source_columns:
+    - UID_Person
+  target_table: Person
+  target_columns:
+    - UID_Person
+
+- name: Person foreign keys are valid
+  type: referential_integrity
+  table: Person
+  column: UID_PersonHead
+  referenced_table: Person
+  referenced_column: UID_Person
+  where:
+    UID_PersonHead:
+      not_null: true
+
+- name: Account and person data are consistent
+  type: cross_table
+  query:
+    source_table: UNSAccountB
+    source_column: UID_Person
+    target_table: Person
+    target_column: UID_Person
+    condition: "source.UID_Person = target.UID_Person"
+
+
+# ============================================================
+# CONDITIONAL / DATASET
+# ============================================================
+
+- name: Inactive persons must have a deletion date
+  type: conditional
+  table: Person
+  condition:
+    IsInActive: true
+  assertion:
+    column: DeletionDate
+    operator: "IS NOT NULL"
+
+- name: Person dataset matches expected structure
+  type: dataset
+  query:
+    table: Person
+    columns:
+      - CentralAccount
+      - IsInActive
+  comparison: contains
+  expected:
+    - CentralAccount: admin
+      IsInActive: false
+    - CentralAccount: service.account
+      IsInActive: false
